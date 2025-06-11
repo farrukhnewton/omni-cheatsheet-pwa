@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omini Surgery Centre Coding Cheatsheet</title>
+    <link rel="icon" href="1631175875814.jpg" type="image/jpeg">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Apply Inter font and a subtle background to the body */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* A very light blue-gray for a fresh start */
+            transition: background-color 0.3s ease;
+        }
+        /* Custom scrollbar for better aesthetics in overflow-x-auto */
+        ::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e2e8f0; /* Tailwind's gray-200 */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #64748b; /* Tailwind's gray-500 */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; /* Tailwind's gray-600 */
+        }
+
+        /* Custom styles for a subtle gradient background on the main container */
+        .gradient-background {
+            background-image: linear-gradient(to bottom right, #e0f2fe, #d1e5f8); /* Light blue to slightly darker blue */
+        }
+
+        /* Keyframe for copied message fade in/out */
+        @keyframes fade-in-out {
+            0% { opacity: 0; transform: translateY(20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(20px); }
+        }
+        .animate-fade-in-out {
+            animation: fade-in-out 1.5s ease-out forwards;
+        }
+    </style>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        // Explicitly reference ReactDOM from the window object to ensure it's defined
+        const ReactDOM = window.ReactDOM;
+
+        // Map for inferring Categories from Procedure names
+        const procedureKeywordToCategoryMap = [
+            // More specific Pain Management first
+            { keywords: ['nerve block', 'injection', 'trigger finger', 'si joint', 'carpal tunnel', 'joint or bursa', 'trapezius', 'hyalgan', 'genicular nerve', 'rfa', 'epidural', 'medial branch block', 'transforaminal'], category: "Pain Management Procedures" },
+            // Neuromodulation
+            { keywords: ['spinal cord stimulator', 'ipg', 'peripheral nerve stimulation'], category: "Neuromodulation (SCS/PNS)" },
+            // Spine Surgery
+            { keywords: ['discectomy', 'laminotomies', 'tlif', 'kyphoplasty', 'fusion', 'interspinous spacer', 'olif', 'biodisc', 'rhizotomy', 'sacroiliac joint stabalization'], category: "Spine Procedures / Surgery" },
+            // Foot & Ankle Orthopedics
+            { keywords: ['hammertoe', 'arthrodesis, great toe', 'bunionectomy', 'sesamoid excision', 'plantar fibroma'], category: "Foot & Ankle Procedures / Orthopedics" },
+        ];
+
+        // Map for assigning Super Categories to inferred Categories
+        const categoryToSuperCategoryMap = {
+            "Spine Procedures / Surgery": "Surgical Specialties",
+            "Foot & Ankle Procedures / Orthopedics": "Surgical Specialties",
+            "Neuromodulation (SCS/PNS)": "Pain Management & Neuromodulation",
+            "Pain Management Procedures": "Pain Management & Neuromodulation",
+            "General Procedures": "General & Other Procedures",
+        };
+
+
+        /**
+         * Helper function to parse a CSV string into an array of JavaScript objects.
+         * Each object represents a row, with keys corresponding to the CSV headers.
+         * It also infers a 'Category' and 'SuperCategory' based on procedure keywords.
+         * @param {string} csvString - The raw CSV data as a string.
+         * @returns {Array<Object>} An array of objects representing the CSV data with inferred categories.
+         */
+        const parseCsv = (csvString) => {
+            const lines = csvString.trim().split('\n');
+            if (lines.length === 0) return [];
+
+            const headers = lines[0].split(',').map(header => header.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(value => value.trim());
+                if (values.length === headers.length) {
+                    let row = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index];
+                    });
+
+                    // Infer Category based on 'Procedures' column
+                    let inferredCategory = "General Procedures"; // Default
+                    if (row.Procedures) {
+                        const procedureText = row.Procedures.toLowerCase();
+                        for (const { keywords, category } of procedureKeywordToCategoryMap) {;
+                            if (keywords.some(keyword => procedureText.includes(keyword))) {
+                                inferredCategory = category;
+                                break; // Assign the first matched category and stop
+                            }
+                        }
+                    }
+                    row.Category = inferredCategory;
+
+                    // Assign SuperCategory based on inferred Category
+                    row.SuperCategory = categoryToSuperCategoryMap[inferredCategory] || "Other";
+
+                    data.push(row);
+                }
+            }
+            return data;
+        };
+
+        /**
+         * Main App component for the Healthcare Coding Cheatsheet.
+         * Manages data parsing, filtering, sorting, and rendering.
+         */
+        const App = () => {
+            // --- Your Cleaned CSV Data ---
+            const csvDataString = `Procedures,CPT,ADD-ON CPT,IMAGING CPT,ICD-10 CM,MODIFIER,IMPLANT / MEDICATION CODES,GUIDLINES,CMS LCD#
+Lumbar discectomy using transpedicular approach,63056,"64483 || 63057 Additional level",,M51.16,LT/RT ,J3301-JZ,"CPT 64483 IS FOR REPORTING ONLY . INSURANCE WILL NOT PAY IT",
+Thoracic Discectomy using transpedicular approach,,,,,,,,
+Lumbar microscopic/endoscopically assisted open Laminotomies and ligamentum flavectomies,"63030 (Removal of herinated disc) || 63047 (Decompression of spinal stenosis)","63035 Additional level || 63048 Additional level",,"M99.23 , M99.53 , M48.062 , M51.26 , M51.36",LT/RT ,,"63030 RVUs=28.06 || 63047 RVUs=33.85 || CPT 63030 IS A UNILATERAL PROCEDURE ",
+Transforaminal Lumbar Interbody Fusion (TLIF),22633 63047,"22853 || 20939 || 20936",,"G83.4 , M48.062 , M43.16 , M53.3",51/59,"C1713 FOR SCREWS/cage/plate","use modifier ""51"" with cpt 63047 to override NCCI Edit",
+Thoracic Kyphoplasty,22513,22515,,M80.08XS,,C1889 ,,
+Lumbar Kyphoplasty,22514,22515,,M80.88XS,,C1889 ,,
+Lumbar basivertebral nerve ablation procedure ,64628,64629,,M54.51,,,,
+MILD procedure,0275T,,,"M48.062 || Z00.6 (MCR AND MCR ADVANTAGE PLAN ONLY)",,,"Medicare patient: || Only once in a year",
+Interspinous Spacer Lumbar,"22612, 63030 ",22840,,"M51.16, M48.062",,C1713 FOR SCREWS/cage/plate,"CPT 22612 RVU=48.03 || CPT 63030 RVU=28.06",
+VIVEX procedure at L4-L5,0627T,,,,,,,
+L3-L4 OLIF/Posterior Fixation Anterior Plate with Fluoro,"22612 , 2258 , 22840 , 22853, 20939 , 20930",,,"M43.16, M48.062 , M51.26 , M51.36",51/59,"C1713 FOR SCREWS/CAGE/PLATE/K-WIRE || C9359 FOR ALLOGRAFT || C1769 FOR GUIDE WIRE || C1830 FOR BONE MARROE NEEDLE","always look RVUs of CPTs and put higher RVU CPTs on top",
+BIODISC,0627T,,,M51.36,,,,
+Endoscopic Transection Neurectomy/Rhizotomy at,64772,,,M47.816,,,IF ADDITIONAL LEVEL PERFORMED THEN USE SAME CPT WITH MODIFIER 59,
+"Correction, hammertoe (eg, interphalangeal fusion, partial or total phalangectomy)",28285,,,M20.1-,"USE ANATOMICAL MODIFIERS FROM ""T"" SERIES",C1713 FOR SCREWS/K-wire,"combined procedure. always put higher RVU cpt on top and use ""T-series"" modifier and modifier 59 with second and onward CPTs for WC",
+"Arthrodesis, great toe; interphalangeal joint",28755,,,M20.1-,"USE ANATOMICAL MODIFIERS FROM ""T"" SERIES",C1713 FOR SCREWS/K-wire,,
+"Arthrodesis, great toe; metatarsophalangeal joint",28750,,,M20.1-,"USE ANATOMICAL MODIFIERS FROM ""T"" SERIES",C1713 FOR SCREWS/K-wire,,
+Austin Bunionectomy Foot,28296,,,M20.1-,"USE ANATOMICAL MODIFIERS FROM ""T"" SERIES",,,
+Right Tibial Sesamoid Excision,28315,,,M7.5-,"USE ANATOMICAL MODIFIERS FROM ""T"" SERIES",,,
+Resection Plantar Fibroma,28041,,,"D21.2- , M72.2","USE ANATOMICAL MODIFIERS FROM ""T"" SERIES",,,
+Foot McBride Bunionectomy,28292,,,"M20.1- , L89.89- , M204-","USE ANATOMICAL MODIFIERS FROM ""T"" SERIES",C1713 FOR SCREWS/K-wire,,
+Sacroiliac Joint Stabalization/Fusion with allograft and autograft,27279,"20930 || 20936",,M53.3,LT/RT ,C1713 FOR SCREWS || C9359 FOR ALLOGRAFT,,
+Trial of Thoracic spinal cord stimulator ,63650,"63650 (for second lead)",,"Dx: G89.29, M54.14",59 with addon.WHEN 2 LEADS PLACED,"C1897 for medicare and WC ",,"A57792"
+"Permanenet Lumbar spinal cord stimulator with 2 leads, 2 OR cables, 2","63650, 63685","63650 (for second lead)",,"G89.29, M54.16",59 with add-on.,"C1778 FOR LEADS AND C1820 FOR IPG",,"A57792"
+Permanenet Lumbar spinal cord stimulator (IPG) with paddle leads,"63655, 63685",,,"G89.29, M54.16",,"C1778 FOR LEADS AND C1820 FOR IPG",,
+"Trial of peripheral nerve stimulator with 4 3-6 MM leads totaling 32 electrodes, 2 OR cables",64555,"64555 x3",,G89.29,59 with add-on.,"C1897 for medicare and WC ",,"A55531"
+"Permanent peripheral nerve stimulation of superior and inferior, lateral and medial genicular nerves || using FOUR 8 contact 3-6 MM spaced leads (4 leads).","64555 , 64590",64555,,"G89.29, G57.51, M25. 561",59 with add-on.,"C1778 FOR LEADS AND C1820 FOR IPG",,"A55531"
+IPG-implantable pulse generator replacement,63685,,,T85.113A,,C1820 ONLY,,A57792
+Peripheral IPG replacement,64585,,,T85.113D,,C1820 ONLY,,
+Removal of Perm Spinal cord stimulator,"63688, 63661",,,,,NO IMPLANT INVOLVED,,A57792
+Right sciatic nerve block,64445,NONE,,M54.31 ,RT,,,
+Left sciatic nerve block,64445,NONE,,M54.32,LT,,,
+Trigger finger injections,20550,NONE,"77002/76942",M46.02,"LT/ RT and TC",,,
+SI Joint Injections,27096,NONE,,Dx: M53.3 only,LT/ RT ,,"for medicare always use HCPCS Code G0260",
+RT carpal tunnel injections with fluoroscopic and ultrasound guidance,20526,NONE,"77002/76942","DX: G56.01 & G56.02","LT/ RT and TC",,MAX TWO UNITS PER SESSION PER DAY,
+" major joint or bursa (eg, shoulder, hip, knee, subacromial bursa); without ultrasound guidance",20610,NONE,77002,"M25.56-, M25.85-, M25.51-","LT/RT and TC with imaging cpt",,"MAX TWO UNITS PER SESSION PER DAY",
+" major joint or bursa (eg, shoulder, hip, knee, subacromial bursa); with ultrasound guidance",20611,NONE,76942,"M25.56-, M25.85-, M25.51-","LT/RT and TC with imaging cpt",,"MAX TWO UNITS PER SESSION PER DAY",
+INJ Trapezius tendon sheath injections with fluoroscopic guidance,20550,NONE,77002,M46.04,"LT/RT and TC with imaging cpt",,"MAX TWO UNITS PER SESSION PER DAY",
+Left Trapezius trigger point injection,20552,NONE,77002,M79.12,"LT/ RT ",,"MAX TWO UNITS PER SESSION PER DAY",
+knee Joint Inj with Hyalgan (1 in a series of 5) using fluoroscopic and ultrasound Guidance,20610,NONE,73580,"",LT/ RT ,J7321,"MAX TWO UNITS PER SESSION PER DAY",
+"Left or Right Knee Genicular Nerve Blocks (Inferior lateral, Inferior medial, superior lateral, superior medial)",64454,NONE,,"M25.561, M25.562","LT/RT. *IF ALL NERVES ARE NOT TREATED USE MODIFIER 52*",,"ONE TWO UNITS PER SESSION PER DAY",
+RFA of Sacroiliac,64625,,,M47.817,"LT/ RT ",,,
+Cervical Interlaminar Epiduaral,62321,NONE,,M54.12,"LT/ RT ","J3301-JZ,Q9966","ONE TWO UNITS PER SESSION PER DAY",A58995
+Thoracic Interlaminar Epiduaral,62321,NONE,,M54.14,"LT/ RT ","J3301-JZ,Q9966","ONE TWO UNITS PER SESSION PER DAY",A58995
+Lumbar Interlaminar Epiduaral,62323,NONE,,M54.16,"LT/ RT ","J3301-JZ,Q9966","ONE TWO UNITS PER SESSION PER DAY",A58995
+CervicoThoracic Interlaminar Epidural -Such as C7-T1,62321,NONE,,M54.13,"LT/ RT ","J3301-JZ,Q9966","ONE TWO UNITS PER SESSION PER DAY",A58995
+Diagnostic Medial Branch Block Cervical ,64490,"64491-644492",,M47.812,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"MAX TWO UNITS PER SESSION PER DAY",A58405
+Diagnostic Medial Branch Block Thoracic,64490,"64491-644492",,M47.814,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"MAX TWO UNITS PER SESSION PER DAY",A58405
+Diagnostic Medial Branch Block Lumbar ,64493,"64494-64495",,M47.816,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"MAX TWO UNITS PER SESSION PER DAY",A58405
+Comparative Medial Branch Block Cervical,64490,"64494-64495",,M47.812,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"MAX TWO UNITS PER SESSION PER DAY",A58405
+Comparative Medial Branch Block Thoracic,64490,"64491-644492",,M47.814,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"MAX TWO UNITS PER SESSION PER DAY",A58405
+Comparative Medial Branch Block Lumbar,64493,"64494-64495",,M47.816,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"MAX TWO UNITS PER SESSION PER DAY",A58405
+RFA of Cervical,64633,64634,,M47.812,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"IF MORE THAN TWO NERVES TREATED THAN PUT UNITS ACCORDEGLY",A58405 FOR MEDICARE CASES ONLY
+RFA of Thoracic ,64633,,,M47.814,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"IF MORE THAN TWO NERVES TREATED THAN PUT UNITS ACCORDEGLY",A58405 FOR MEDICARE CASES ONLY
+RFA of Lumbar,64635,64636,,M47.816,"LT/ RT AND 59 ON ADD-ON CPT FOR WC",,"IF MORE THAN TWO NERVES TREATED THAN PUT UNITS ACCORDEGLY",A58405 FOR MEDICARE CASES ONLY
+Transforaminal Epiduaral Cervical,64479,64480,,M54.12,"LT/ RT AND 59 ON ADD-ON CPT FOR WC","J3301-JZ,Q9966","MAX TWO UNITS PER SESSION PER DAY FOR MEDICARE ",A58995 FOR MEDICARE CASES
+Transforaminal Epiduaral Thoracic,64479,64480,,M54.14,"LT/ RT AND 59 ON ADD-ON CPT FOR WC","J3301-JZ,Q9966","MAX TWO UNITS PER SESSION PER DAY FOR MEDICARE ",A58995 FOR MEDICARE CASES
+Transforaminal Epiduaral Lumbar,64483,64484,,M54.16,"LT/ RT AND 59 ON ADD-ON CPT FOR WC","J3301-JZ,Q9966","MAX TWO UNITS PER SESSION PER DAY FOR MEDICARE ",A58995 FOR MEDICARE CASES
+Transforaminal Epiduaral Lumbar Socral,64483,64484,,M54.17,"LT/ RT AND 59 ON ADD-ON CPT FOR WC","J3301-JZ,Q9966","MAX TWO UNITS PER SESSION PER DAY FOR MEDICARE ",A58995 FOR MEDICARE CASES
+Transforaminal Epiduaral Socral,64483,64484,,M54.18,"LT/ RT AND 59 ON ADD-ON CPT FOR WC","J3301-JZ,Q9966","MAX TWO UNITS PER SESSION PER DAY FOR MEDICARE ",A58995 FOR MEDICARE CASES
+`;
+
+            // State variables to manage the data, search term, and sorting configuration
+            const [originalData, setOriginalData] = useState([]);
+            const [filteredData, setFilteredData] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
+            const [selectedSuperCategory, setSelectedSuperCategory] = useState('All'); // New state for super category filter
+            const [selectedCategory, setSelectedCategory] = useState('All'); // State for specific category filter
+            const [copiedMessage, setCopiedMessage] = useState(''); // State for copy message
+
+            // useEffect hook to parse CSV data once when the component mounts
+            useEffect(() => {
+                const parsed = parseCsv(csvDataString);
+                setOriginalData(parsed);
+                setFilteredData(parsed); // Initialize filtered data with all original data
+            }, [csvDataString]); // Dependency array ensures this runs only if csvDataString changes
+
+            // useEffect hook to filter and sort data whenever searchTerm, sortConfig, or selectedCategory changes
+            useEffect(() => {
+                let currentData = [...originalData]; // Create a mutable copy of the original data
+
+                // Apply filtering by Super Category
+                if (selectedSuperCategory !== 'All') {
+                    currentData = currentData.filter(row => row.SuperCategory === selectedSuperCategory);
+                }
+
+                // Apply filtering by specific Category (only if 'All' isn't selected for SuperCategory OR if a specific SuperCategory was selected)
+                if (selectedCategory !== 'All') {
+                    currentData = currentData.filter(row => row.Category === selectedCategory);
+                }
+
+                // Apply filtering by search term (always applies last)
+                if (searchTerm) {
+                    currentData = currentData.filter(row =>
+                        Object.values(row).some(value =>
+                            String(value).toLowerCase().includes(searchTerm.toLowerCase())
+                        )
+                    );
+                }
+
+                // Apply sorting if a sort key is configured
+                if (sortConfig.key) {
+                    currentData.sort((a, b) => {
+                        const valA = a[sortConfig.key] || '';
+                        const valB = b[sortConfig.key] || '';
+
+                        if (valA < valB) {
+                            return sortConfig.direction === 'ascending' ? -1 : 1;
+                        }
+                        if (valA > valB) {
+                            return sortConfig.direction === 'ascending' ? 1 : -1;
+                        }
+                        return 0; // Values are equal
+                    });
+                }
+                setFilteredData(currentData); // Update the filtered and sorted data
+            }, [searchTerm, sortConfig, selectedSuperCategory, selectedCategory, originalData]); // Dependencies for this effect
+
+            /**
+             * Handles the request to sort a column. Toggles sort direction if the same column is clicked again.
+             * @param {string} key - The key (header name) of the column to sort by.
+             */
+            const requestSort = (key) => {
+                let direction = 'ascending';
+                if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+                    direction = 'descending';
+                }
+                setSortConfig({ key, direction });
+            };
+
+            /**
+             * Provides a visual indicator (arrow) for the current sort direction of a column.
+             * @param {string} key - The key (header name) of the Cell.
+             * @returns {string} An arrow character (▲ for ascending, ▼ for descending) or empty string.
+             */
+            const getSortIndicator = (key) => {
+                if (sortConfig.key === key) {
+                    return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
+                }
+                return '';
+            };
+
+            /**
+             * Handles copying text to clipboard and shows a temporary message.
+             * @param {string} text - The text content to copy.
+             */
+            const handleCopyClick = (text) => {
+                try {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    setCopiedMessage('Copied!');
+                    setTimeout(() => setCopiedMessage(''), 1500);
+                } catch (err) {
+                    console.error('Failed to copy text: ', err);
+                }
+            };
+
+            // Memoize headers extraction to prevent re-calculation on every render
+            const headers = useMemo(() => {
+                if (originalData.length > 0) {
+                    // Ensure 'Category' and 'SuperCategory' are always included in the displayed headers
+                    const baseHeaders = Object.keys(originalData[0]);
+                    if (!baseHeaders.includes('Category')) {
+                        baseHeaders.push('Category');
+                    }
+                    if (!baseHeaders.includes('SuperCategory')) {
+                        baseHeaders.push('SuperCategory');
+                    }
+                    return baseHeaders;
+                }
+                return [];
+            }, [originalData]);
+
+            // Memoize unique super categories for the filter dropdown
+            const superCategories = useMemo(() => {
+                const uniqueSuperCategories = new Set(originalData.map(row => row.SuperCategory).filter(Boolean));
+                return ['All', ...Array.from(uniqueSuperCategories).sort()];
+            }, [originalData]);
+
+            // Memoize unique categories for the filter dropdown (depends on current super category selection)
+            const categories = useMemo(() => {
+                let currentCategories = originalData;
+                if (selectedSuperCategory !== 'All') {
+                    currentCategories = originalData.filter(row => row.SuperCategory === selectedSuperCategory);
+                }
+                const uniqueCategories = new Set(currentCategories.map(row => row.Category).filter(Boolean));
+                return ['All', ...Array.from(uniqueCategories).sort()];
+            }, [originalData, selectedSuperCategory]);
+
+            return (
+                <div className="min-h-screen gradient-background p-4 sm:p-6 lg:p-10 flex flex-col items-center">
+                    {/* Header Section */}
+                    <header className="w-full max-w-7xl bg-gradient-to-br from-blue-900 to-indigo-900 shadow-2xl rounded-3xl p-6 mb-8 text-center border-b-8 border-teal-400 transform hover:scale-100 transition-transform duration-300 ease-in-out">
+                        <div className="flex items-center justify-center flex-col mb-4">
+                            <h1 className="text-4xl sm:text-6xl font-extrabold text-white leading-tight drop-shadow-md">
+                                Omini Surgery Centre Coding Cheatsheet
+                            </h1>
+                        </div>
+                        <p className="text-xl sm:text-2xl font-medium text-blue-200 mb-4 tracking-wide">
+                            Your Comprehensive Guide to Medical Coding Excellence
+                        </p>
+                        <div className="text-md sm:text-lg text-blue-300 font-semibold flex flex-col sm:flex-row items-center justify-center">
+                            <span className="mb-1 sm:mb-0">Developed by <span className="text-white font-extrabold text-xl">Farrukh Yaqoob</span></span>
+                            <span className="hidden sm:inline-block mx-3 text-blue-400">|</span>
+                            <span><span className="text-white font-extrabold text-xl">Medical Coder</span></span>
+                        </div>
+                    </header>
+
+                    {/* Filter and Search Section */}
+                    <div className="w-full max-w-7xl mb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Super Category Filter Dropdown */}
+                        <div className="relative">
+                            <select
+                                className="w-full pl-4 pr-10 py-4 border border-blue-400 rounded-2xl shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-600 text-gray-800 appearance-none transition-all duration-300 ease-in-out text-lg bg-white"
+                                value={selectedSuperCategory}
+                                onChange={(e) => {
+                                    setSelectedSuperCategory(e.target.value);
+                                    setSelectedCategory('All'); // Reset specific category filter
+                                    setSearchTerm(''); // Clear search
+                                }}
+                            >
+                                {superCategories.map((superCat) => (
+                                    <option key={superCat} value={superCat}>
+                                        {superCat === 'All' ? 'Filter by Super Category (All)' : superCat}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                <i className="fas fa-chevron-down"></i>
+                            </div>
+                        </div>
+
+                        {/* Category Filter Dropdown */}
+                        <div className="relative">
+                            <select
+                                className="w-full pl-4 pr-10 py-4 border border-blue-400 rounded-2xl shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-600 text-gray-800 appearance-none transition-all duration-300 ease-in-out text-lg bg-white"
+                                value={selectedCategory}
+                                onChange={(e) => {
+                                    setSelectedCategory(e.target.value);
+                                    setSearchTerm(''); // Clear search
+                                }}
+                            >
+                                {categories.map((cat) => (
+                                    <option key={cat} value={cat}>
+                                        {cat === 'All' ? 'Filter by Category (All)' : cat}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                <i className="fas fa-chevron-down"></i>
+                            </div>
+                        </div>
+
+                        {/* Search Input */}
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Search all fields..."
+                                className="w-full pl-12 pr-4 py-4 border border-blue-400 rounded-2xl shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500 focus:border-blue-600 text-gray-800 placeholder-gray-500 transition-all duration-300 ease-in-out text-lg"
+                                value={searchTerm}
+                                onChange={(e) => {
+                                    setSearchTerm(e.target.value);
+                                    setSelectedSuperCategory('All'); // Clear category filters when searching
+                                    setSelectedCategory('All');
+                                }}
+                            />
+                            <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xl"></i>
+                        </div>
+                    </div>
+
+                    {/* Data Table - Removed fixed height and overflow from this div */}
+                    <div className="w-full max-w-7xl bg-white shadow-xl rounded-2xl border border-gray-100 relative">
+                        <table className="min-w-full divide-y divide-blue-200">
+                            <thead className="bg-blue-100 sticky top-0 z-10"> {/* Table header is sticky to the viewport */}
+                                <tr>
+                                    {/* Dynamically render table headers with sorting functionality */}
+                                    {headers.map((header) => (
+                                        <th
+                                            key={header}
+                                            className="px-4 py-4 text-left text-sm font-bold text-blue-800 uppercase tracking-wider cursor-pointer select-none hover:bg-blue-200 transition-colors duration-200 first:rounded-tl-2xl last:rounded-tr-2xl"
+                                            onClick={() => requestSort(header)}
+                                        >
+                                            {header}
+                                            {getSortIndicator(header)}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-100">
+                                {/* Render filtered and sorted data rows */}
+                                {filteredData.length > 0 ? (
+                                    filteredData.map((row, rowIndex) => (
+                                        <tr key={rowIndex} className="hover:bg-gray-100 transition-colors duration-200 even:bg-gray-50">
+                                            {headers.map((header) => (
+                                                <td
+                                                    key={`${rowIndex}-${header}`}
+                                                    onClick={() => handleCopyClick(row[header])}
+                                                    className="px-4 py-3 whitespace-pre-wrap text-sm text-gray-800 border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors duration-150 relative group"
+                                                >
+                                                    {row[header]}
+                                                    {/* Subtle copy icon on hover */}
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                        <i className="fas fa-copy text-xs"></i>
+                                                    </span>
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        {/* Message when no data is found */}
+                                        <td colSpan={headers.length} className="px-4 py-8 text-center text-base text-gray-600 font-medium">
+                                            <i className="fas fa-exclamation-circle text-red-500 mr-2"></i> No data found or matches your search. Please refine your search terms or filter.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Copied Message Notification */}
+                    {copiedMessage && (
+                        <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-full shadow-xl text-lg font-semibold z-50 animate-fade-in-out transform transition-transform duration-300">
+                            <i className="fas fa-check-circle mr-2"></i> {copiedMessage}
+                        </div>
+                    )}
+
+                    {/* Footer Section */}
+                    <footer className="w-full max-w-7xl mt-12 text-center text-gray-600 text-sm opacity-90">
+                        <p className="mb-2 text-base font-medium">Dedicated to precision and clarity in medical coding.</p>
+                        <p className="text-gray-500">&copy; 2025 Farrukh Yaqoob. All rights reserved.</p>
+                    </footer>
+                </div>
+            );
+        };
+
+        // Render the React App component into the 'root' div
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
